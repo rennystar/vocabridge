@@ -1,0 +1,72 @@
+name: release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  publish:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            args: --target aarch64-apple-darwin --bundles dmg --no-sign -- --no-default-features
+            asset_name_pattern: VocaBridge-v[version]-macOS-AppleSilicon[ext]
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            args: --target x86_64-apple-darwin --bundles dmg --no-sign -- --no-default-features
+            asset_name_pattern: VocaBridge-v[version]-macOS-Intel[ext]
+          - os: windows-2025-vs2026
+            target: x86_64-pc-windows-msvc
+            args: --bundles msi --no-sign -- --no-default-features
+            asset_name_pattern: VocaBridge-v[version]-Windows-x64[ext]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ./src-tauri -> target
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Publish release artifacts
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: v__VERSION__
+          releaseName: VocaBridge v__VERSION__
+          releaseBody: |
+            Prototype release build for VocaBridge.
+
+            Notes:
+            - GitHub release binaries exclude the Cambridge scraper
+            - macOS and Windows artifacts are unsigned
+            - Windows builds may require Microsoft WebView2 on the target machine
+          releaseDraft: false
+          prerelease: true
+          args: ${{ matrix.args }}
+          releaseAssetNamePattern: ${{ matrix.asset_name_pattern }}

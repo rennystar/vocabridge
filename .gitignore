@@ -1,0 +1,15 @@
+node_modules/
+dist/
+src-tauri/target/
+
+HANDOFF.local.md
+
+.DS_Store
+*.log
+.env*
+*.dmg
+*.msi
+*.app
+
+.vscode/
+.idea/

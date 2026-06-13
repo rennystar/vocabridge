@@ -1,0 +1,81 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Outfit Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-phonetic: "Noto Sans Variable", ui-sans-serif, system-ui, sans-serif;
+
+  --color-app-bg: var(--app-bg);
+  --color-app-panel: var(--app-panel);
+  --color-app-panel-2: var(--app-panel-2);
+  --color-app-border: var(--app-border);
+  --color-app-text: var(--app-text);
+  --color-app-muted: var(--app-muted);
+  --color-app-dim: var(--app-dim);
+  --color-app-accent: var(--app-accent);
+  --color-app-danger: var(--app-danger);
+}
+
+:root {
+  --app-bg: #0d0d0c;
+  --app-panel: #141412;
+  --app-panel-2: #1a1916;
+  --app-border: #2c2a25;
+  --app-text: #f2eee7;
+  --app-muted: #9c968c;
+  --app-dim: #6f695f;
+  --app-accent: #2dd4b8;
+  --app-danger: #f07373;
+
+  --vb-search-size: 1.75rem;
+  --vb-search-pt: 2rem;
+  --vb-search-pb: 1.25rem;
+  --vb-headword-size: 1.875rem;
+  --vb-headword-pt: 0.25rem;
+  --vb-headword-pb: 1.5rem;
+  --vb-entry-gap: 0.5rem;
+  --vb-entry-header-py: 0.5rem;
+  --vb-definition-size: 0.95rem;
+  --vb-example-size: 0.875rem;
+}
+
+[data-display-size="compact"] {
+  --vb-search-size: 1.55rem;
+  --vb-search-pt: 1.5rem;
+  --vb-search-pb: 1rem;
+  --vb-headword-size: 1.65rem;
+  --vb-headword-pb: 1.25rem;
+  --vb-entry-gap: 0.375rem;
+  --vb-entry-header-py: 0.375rem;
+  --vb-definition-size: 0.9rem;
+  --vb-example-size: 0.82rem;
+}
+
+[data-display-size="large"] {
+  --vb-search-size: 1.95rem;
+  --vb-search-pt: 2.25rem;
+  --vb-search-pb: 1.5rem;
+  --vb-headword-size: 2.1rem;
+  --vb-headword-pb: 1.75rem;
+  --vb-entry-gap: 0.625rem;
+  --vb-entry-header-py: 0.625rem;
+  --vb-definition-size: 1.05rem;
+  --vb-example-size: 0.95rem;
+}
+
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  color: var(--app-text);
+  font-family: var(--font-sans);
+  font-kerning: normal;
+  text-rendering: optimizeLegibility;
+}
+
+html, body, #root {
+  background-color: transparent;
+}
+
+.browser-preview-window .h-screen {
+  height: 100%;
+}
