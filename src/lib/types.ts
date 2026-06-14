@@ -30,11 +30,14 @@ export type DisplaySize = "compact" | "default" | "large";
 
 export type ExampleDisplay = "all" | "firstPerMeaning" | "hidden";
 
+export type HistoryClickBehavior = "savedSnapshot" | "refreshFromDictionary";
+
 export interface Settings {
   displaySize: DisplaySize;
   searchDelay: number;
   clearDelay: number;
   dictSource: DictSource;
+  historyClickBehavior: HistoryClickBehavior;
   exampleDisplay: ExampleDisplay;
   collapseExamples: boolean;
   highlightExampleTerms: boolean;
@@ -48,7 +51,7 @@ export interface Settings {
 export interface HistoryItem {
   cacheKey: string;
   displayWord: string;
-  source: string;
+  source: DictSource;
   partOfSpeech: string | null;
   definitionPreview: string | null;
   lookupCount: number;

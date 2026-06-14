@@ -19,6 +19,7 @@ export interface SearchState {
   result: WordEntry | null;
   error: string | null;
   previousResult: WordEntry | null;
+  autoPlayResultAudio: boolean;
 }
 
 const initialState: SearchState = {
@@ -27,6 +28,7 @@ const initialState: SearchState = {
   result: null,
   error: null,
   previousResult: null,
+  autoPlayResultAudio: true,
 };
 
 // -- Actions -------------------------------------------------------------
@@ -34,7 +36,7 @@ const initialState: SearchState = {
 export type SearchAction =
   | { type: "TYPE"; text: string }
   | { type: "SEARCH" }
-  | { type: "RESULT"; entry: WordEntry }
+  | { type: "RESULT"; entry: WordEntry; autoPlayAudio?: boolean }
   | { type: "ERROR"; message: string }
   | { type: "CLEAR" }
   | { type: "RESET" };
@@ -63,6 +65,7 @@ function searchReducer(state: SearchState, action: SearchAction): SearchState {
         result: action.entry,
         previousResult: state.result,
         error: null,
+        autoPlayResultAudio: action.autoPlayAudio ?? true,
       };
     case "ERROR":
       return {
@@ -77,6 +80,7 @@ function searchReducer(state: SearchState, action: SearchAction): SearchState {
         query: "",
         previousResult: state.result ?? state.previousResult,
         result: null,
+        autoPlayResultAudio: state.autoPlayResultAudio,
       };
     case "RESET":
       return initialState;

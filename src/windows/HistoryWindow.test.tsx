@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import HistoryWindow from "./HistoryWindow";
@@ -9,7 +9,24 @@ const mocks = vi.hoisted(() => ({
   exportHistory: vi.fn(),
   closeHistoryWindow: vi.fn(),
   requestLookupFromHistory: vi.fn(),
+  requestSnapshotFromHistory: vi.fn(),
+  listenForHistoryUpdates: vi.fn(),
   save: vi.fn(),
+  settings: {
+    displaySize: "default",
+    searchDelay: 1000,
+    clearDelay: 3000,
+    dictSource: "free_dictionary",
+    historyClickBehavior: "savedSnapshot",
+    exampleDisplay: "all",
+    collapseExamples: false,
+    highlightExampleTerms: true,
+    convertKoreanInput: true,
+    alwaysOnTop: false,
+    globalHotkey: "CmdOrCtrl+Shift+D",
+    autoPlayAudio: true,
+    preferredRegion: "uk",
+  },
 }));
 
 vi.mock("../lib/commands", () => ({
@@ -20,8 +37,23 @@ vi.mock("../lib/commands", () => ({
 
 vi.mock("../lib/windowApi", () => ({
   closeHistoryWindow: () => mocks.closeHistoryWindow(),
-  requestLookupFromHistory: (word: string, focusMain: boolean) =>
-    mocks.requestLookupFromHistory(word, focusMain),
+  requestLookupFromHistory: (word: string, source: string, focusMain: boolean) =>
+    mocks.requestLookupFromHistory(word, source, focusMain),
+  requestSnapshotFromHistory: (
+    cacheKey: string,
+    source: string,
+    focusMain: boolean,
+  ) => mocks.requestSnapshotFromHistory(cacheKey, source, focusMain),
+  listenForHistoryUpdates: (handler: () => void) =>
+    mocks.listenForHistoryUpdates(handler),
+}));
+
+vi.mock("../hooks/useSettingsState", () => ({
+  useSettingsState: () => ({
+    settings: mocks.settings,
+    sources: ["free_dictionary", "cambridge"],
+    saveSettings: vi.fn(),
+  }),
 }));
 
 vi.mock("@tauri-apps/plugin-dialog", () => ({
@@ -34,7 +66,7 @@ describe("HistoryWindow", () => {
       {
         cacheKey: "bridge",
         displayWord: "bridge",
-        source: "free-dict",
+        source: "free_dictionary",
         partOfSpeech: "noun",
         definitionPreview: "a structure carrying a road over water",
         lookupCount: 2,
@@ -44,6 +76,9 @@ describe("HistoryWindow", () => {
     mocks.clearHistory.mockResolvedValue(undefined);
     mocks.closeHistoryWindow.mockResolvedValue(undefined);
     mocks.requestLookupFromHistory.mockResolvedValue(undefined);
+    mocks.requestSnapshotFromHistory.mockResolvedValue(undefined);
+    mocks.listenForHistoryUpdates.mockResolvedValue(vi.fn());
+    mocks.settings.historyClickBehavior = "savedSnapshot";
     vi.clearAllMocks();
   });
 
@@ -58,7 +93,23 @@ describe("HistoryWindow", () => {
     await screen.findByRole("button", { name: /bridge/i });
   });
 
-  it("clicks an item without focusing main", async () => {
+  it("clicks an item using the saved snapshot by default", async () => {
+    const user = userEvent.setup();
+    render(<HistoryWindow />);
+
+    await screen.findByRole("button", { name: /bridge/i });
+    await user.click(screen.getByRole("button", { name: /bridge/i }));
+
+    expect(mocks.requestSnapshotFromHistory).toHaveBeenCalledWith(
+      "bridge",
+      "free_dictionary",
+      false,
+    );
+    expect(mocks.requestLookupFromHistory).not.toHaveBeenCalled();
+  });
+
+  it("refreshes from the dictionary when configured", async () => {
+    mocks.settings.historyClickBehavior = "refreshFromDictionary";
     const user = userEvent.setup();
     render(<HistoryWindow />);
 
@@ -67,8 +118,10 @@ describe("HistoryWindow", () => {
 
     expect(mocks.requestLookupFromHistory).toHaveBeenCalledWith(
       "bridge",
+      "free_dictionary",
       false,
     );
+    expect(mocks.requestSnapshotFromHistory).not.toHaveBeenCalled();
   });
 
   it("uses Cmd/Ctrl+Enter to request main focus", async () => {
@@ -80,11 +133,86 @@ describe("HistoryWindow", () => {
     await user.keyboard("{Meta>}{Enter}{/Meta}");
 
     await waitFor(() => {
-      expect(mocks.requestLookupFromHistory).toHaveBeenCalledWith(
+      expect(mocks.requestSnapshotFromHistory).toHaveBeenCalledWith(
         "bridge",
+        "free_dictionary",
         true,
       );
     });
+  });
+
+  it("reloads when another lookup updates history", async () => {
+    let historyUpdatedHandler: (() => void) | undefined;
+    mocks.listenForHistoryUpdates.mockImplementation((handler) => {
+      historyUpdatedHandler = handler;
+      return Promise.resolve(vi.fn());
+    });
+    mocks.getHistory
+      .mockResolvedValueOnce([
+        {
+          cacheKey: "bridge",
+          displayWord: "bridge",
+          source: "free_dictionary",
+          partOfSpeech: "noun",
+          definitionPreview: "a structure carrying a road over water",
+          lookupCount: 2,
+          lookedUpAt: "2026-04-26 00:00:00",
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          cacheKey: "canteen",
+          displayWord: "canteen",
+          source: "cambridge",
+          partOfSpeech: "noun",
+          definitionPreview: "a place where food and drink are served",
+          lookupCount: 1,
+          lookedUpAt: "2026-06-14 00:00:00",
+        },
+        {
+          cacheKey: "bridge",
+          displayWord: "bridge",
+          source: "free_dictionary",
+          partOfSpeech: "noun",
+          definitionPreview: "a structure carrying a road over water",
+          lookupCount: 2,
+          lookedUpAt: "2026-04-26 00:00:00",
+        },
+      ]);
+
+    render(<HistoryWindow />);
+
+    await screen.findByRole("button", { name: /bridge/i });
+    expect(historyUpdatedHandler).toBeDefined();
+
+    historyUpdatedHandler?.();
+
+    await waitFor(() => expect(mocks.getHistory).toHaveBeenCalledTimes(2));
+    expect(await screen.findByRole("button", { name: /canteen/i })).toBeTruthy();
+  });
+
+  it("cleans up a pending update listener when registration finishes after unmount", async () => {
+    let resolveListener:
+      | ((cleanup: () => void) => void)
+      | undefined;
+    const cleanup = vi.fn();
+    mocks.listenForHistoryUpdates.mockImplementation(
+      () =>
+        new Promise<() => void>((resolve) => {
+          resolveListener = resolve;
+        }),
+    );
+
+    const { unmount } = render(<HistoryWindow />);
+
+    await screen.findByRole("button", { name: /bridge/i });
+    unmount();
+
+    await act(async () => {
+      resolveListener?.(cleanup);
+    });
+
+    expect(cleanup).toHaveBeenCalledTimes(1);
   });
 
   it("closes from Escape", async () => {
@@ -122,7 +250,7 @@ describe("HistoryWindow", () => {
         {
           cacheKey: "bridge",
           displayWord: "bridge",
-          source: "free-dict",
+          source: "free_dictionary",
           partOfSpeech: "noun",
           definitionPreview: "a structure carrying a road over water",
           lookupCount: 2,

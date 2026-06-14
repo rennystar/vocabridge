@@ -1,6 +1,6 @@
 [package]
 name = "vocabridge"
-version = "0.1.0"
+version = "0.2.0"
 description = "A lightweight desktop dictionary app for rapid vocabulary lookup"
 authors = ["rennystar"]
 edition = "2021"

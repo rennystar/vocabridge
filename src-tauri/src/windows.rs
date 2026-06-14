@@ -1,3 +1,4 @@
+use crate::dict::{DictSource, WordEntry};
 use serde::{Deserialize, Serialize};
 use tauri::{
     utils::config::Color, webview::PageLoadEvent, Emitter, LogicalPosition, Manager, TitleBarStyle,
@@ -8,6 +9,8 @@ pub const MAIN_LABEL: &str = "main";
 pub const SETTINGS_LABEL: &str = "settings";
 pub const HISTORY_LABEL: &str = "history";
 pub const HISTORY_LOOKUP_EVENT: &str = "history:lookup";
+pub const HISTORY_SNAPSHOT_EVENT: &str = "history:snapshot";
+pub const HISTORY_UPDATED_EVENT: &str = "history:updated";
 
 const AUX_WINDOW_GAP: i32 = 12;
 const HIDDEN_TRAFFIC_LIGHT_POSITION: f64 = -100.0;
@@ -18,6 +21,14 @@ const AUX_WINDOW_BACKGROUND_COLOR: Color = Color(13, 13, 12, 255);
 #[serde(rename_all = "camelCase")]
 pub struct HistoryLookupRequest {
     pub word: String,
+    pub source: DictSource,
+    pub focus_main: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HistorySnapshotRequest {
+    pub entry: WordEntry,
     pub focus_main: bool,
 }
 
@@ -229,6 +240,29 @@ pub fn hide_auxiliary_windows<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
     }
 }
 
+pub fn emit_history_updated<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<(), String> {
+    if let Some(history) = app.get_webview_window(HISTORY_LABEL) {
+        history
+            .emit(HISTORY_UPDATED_EVENT, ())
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+pub fn emit_history_snapshot<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    entry: WordEntry,
+    focus_main: bool,
+) -> Result<(), String> {
+    let payload = HistorySnapshotRequest { entry, focus_main };
+    app.emit_to(MAIN_LABEL, HISTORY_SNAPSHOT_EVENT, payload.clone())
+        .map_err(|e| e.to_string())?;
+    if payload.focus_main {
+        reveal_main_window(app);
+    }
+    Ok(())
+}
+
 fn focus_or_show(window: &WebviewWindow) {
     if !window.is_visible().unwrap_or(false) {
         window.show().ok();
@@ -341,9 +375,14 @@ pub fn close_history_window(app: tauri::AppHandle) -> Result<(), String> {
 pub fn request_lookup_from_history(
     app: tauri::AppHandle,
     word: String,
+    source: DictSource,
     focus_main: bool,
 ) -> Result<(), String> {
-    let payload = HistoryLookupRequest { word, focus_main };
+    let payload = HistoryLookupRequest {
+        word,
+        source,
+        focus_main,
+    };
     app.emit_to(MAIN_LABEL, HISTORY_LOOKUP_EVENT, payload.clone())
         .map_err(|e| e.to_string())?;
     if payload.focus_main {
@@ -465,9 +504,30 @@ mod tests {
     fn history_lookup_payload_uses_camel_case_focus_flag() {
         let payload = HistoryLookupRequest {
             word: "bridge".to_string(),
+            source: DictSource::FreeDictionary,
             focus_main: true,
         };
         let json = serde_json::to_string(&payload).expect("serialize payload");
-        assert_eq!(json, r#"{"word":"bridge","focusMain":true}"#);
+        assert_eq!(
+            json,
+            r#"{"word":"bridge","source":"free_dictionary","focusMain":true}"#
+        );
+    }
+
+    #[test]
+    fn history_snapshot_payload_uses_camel_case_focus_flag() {
+        let payload = HistorySnapshotRequest {
+            entry: crate::dict::WordEntry {
+                word: "bridge".to_string(),
+                source: DictSource::Cambridge,
+                entries: vec![],
+            },
+            focus_main: true,
+        };
+        let json = serde_json::to_string(&payload).expect("serialize payload");
+        assert_eq!(
+            json,
+            r#"{"entry":{"word":"bridge","source":"cambridge","entries":[]},"focusMain":true}"#
+        );
     }
 }

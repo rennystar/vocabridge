@@ -155,10 +155,11 @@ impl HistoryStore {
         )?;
 
         let rows = stmt.query_map([], |row| {
+            let stored_source: String = row.get(2)?;
             Ok(HistoryItem {
                 cache_key: row.get(0)?,
                 display_word: row.get(1)?,
-                source: row.get(2)?,
+                source: canonical_source_str(&stored_source).to_string(),
                 part_of_speech: row.get(3)?,
                 definition_preview: row.get(4)?,
                 lookup_count: row.get(5)?,
@@ -167,6 +168,38 @@ impl HistoryStore {
         })?;
 
         rows.collect()
+    }
+
+    pub fn get_snapshot_and_record_view(
+        &self,
+        cache_key: &str,
+        source: &DictSource,
+    ) -> Result<Option<WordEntry>, rusqlite::Error> {
+        let source_str = source_to_str(source);
+
+        let result: Result<String, _> = self.conn.query_row(
+            "SELECT full_entry_json
+             FROM history
+             WHERE cache_key = ?1
+               AND source = ?2",
+            params![cache_key, source_str],
+            |row| row.get(0),
+        );
+
+        match result {
+            Ok(json) => {
+                self.conn.execute(
+                    "UPDATE history
+                     SET lookup_count = lookup_count + 1,
+                         looked_up_at = CURRENT_TIMESTAMP
+                     WHERE cache_key = ?1 AND source = ?2",
+                    params![cache_key, source_str],
+                )?;
+                Ok(serde_json::from_str::<WordEntry>(&json).ok())
+            }
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(err) => Err(err),
+        }
     }
 
     // ── Clear ────────────────────────────────────────────────────────
@@ -228,6 +261,14 @@ fn source_to_str(source: &DictSource) -> &'static str {
     match source {
         DictSource::Cambridge => "cambridge",
         DictSource::FreeDictionary => "free-dict",
+    }
+}
+
+fn canonical_source_str(stored_source: &str) -> &'static str {
+    match stored_source {
+        "cambridge" => "cambridge",
+        "free-dict" | "free_dictionary" => "free_dictionary",
+        _ => "free_dictionary",
     }
 }
 
@@ -304,6 +345,18 @@ mod tests {
     }
 
     #[test]
+    fn list_returns_canonical_source_names() {
+        let temp_dir = unique_temp_dir("history-source-name");
+        let store = HistoryStore::new(&temp_dir).expect("history store");
+        let entry = sample_entry("apathy", DictSource::FreeDictionary);
+
+        store.upsert_with_cache_key("apathy", &entry);
+
+        let item = store.list().expect("history").remove(0);
+        assert_eq!(item.source, "free_dictionary");
+    }
+
+    #[test]
     fn expired_cache_entries_are_ignored() {
         let temp_dir = unique_temp_dir("history-cache-expired");
         let store = HistoryStore::new(&temp_dir).expect("history store");
@@ -320,6 +373,31 @@ mod tests {
 
         let cached = store.get_cached("apathy", &DictSource::FreeDictionary);
         assert!(cached.is_none(), "expired cache should not be reused");
+    }
+
+    #[test]
+    fn snapshots_are_returned_without_cache_expiry_and_count_once() {
+        let temp_dir = unique_temp_dir("history-snapshot");
+        let store = HistoryStore::new(&temp_dir).expect("history store");
+        let entry = sample_entry("bridge", DictSource::Cambridge);
+
+        store.upsert_with_cache_key("bridge", &entry);
+        store
+            .conn
+            .execute(
+                "UPDATE history SET looked_up_at = datetime('now', '-25 hours')",
+                [],
+            )
+            .expect("expire cache entry");
+
+        let snapshot = store
+            .get_snapshot_and_record_view("bridge", &DictSource::Cambridge)
+            .expect("snapshot lookup")
+            .expect("stored snapshot");
+
+        assert_eq!(snapshot.word, "bridge");
+        assert_eq!(snapshot.source, DictSource::Cambridge);
+        assert_eq!(store.list().expect("history").remove(0).lookup_count, 2);
     }
 
     #[test]

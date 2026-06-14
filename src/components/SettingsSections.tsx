@@ -75,6 +75,20 @@ export default function SettingsSections({
           </Field>
         )}
 
+        <FieldBlock label="History click">
+          <TextToggleGroup
+            value={settings.historyClickBehavior}
+            options={HISTORY_CLICK_OPTIONS}
+            ariaLabel="History click behavior"
+            onValueChange={(value) =>
+              update(
+                "historyClickBehavior",
+                value as Settings["historyClickBehavior"],
+              )
+            }
+          />
+        </FieldBlock>
+
         <FieldBlock label="Search delay">
           <DelayToggleGroup
             value={settings.searchDelay}
@@ -455,6 +469,11 @@ const DISPLAY_SIZE_OPTIONS: TextOption[] = [
   { label: "Compact", value: "compact" },
   { label: "Default", value: "default" },
   { label: "Large", value: "large" },
+];
+
+const HISTORY_CLICK_OPTIONS: TextOption[] = [
+  { label: "Saved snapshot", value: "savedSnapshot" },
+  { label: "Refresh", value: "refreshFromDictionary" },
 ];
 
 const SEARCH_DELAY_OPTIONS: DelayOption[] = [

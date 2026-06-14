@@ -8,6 +8,7 @@ const settings: Settings = {
   searchDelay: 1000,
   clearDelay: 3000,
   dictSource: "free_dictionary",
+  historyClickBehavior: "savedSnapshot",
   exampleDisplay: "all",
   collapseExamples: false,
   highlightExampleTerms: true,
@@ -130,6 +131,24 @@ describe("SettingsSections", () => {
       clearDelay: 5000,
     });
     expect(screen.queryByRole("slider")).toBeNull();
+  });
+
+  it("reports history click behavior updates", () => {
+    const onUpdate = vi.fn();
+    render(
+      <SettingsSections
+        settings={settings}
+        availableSources={["free_dictionary", "cambridge"]}
+        onUpdate={onUpdate}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("radio", { name: "Refresh" }));
+
+    expect(onUpdate).toHaveBeenCalledWith({
+      ...settings,
+      historyClickBehavior: "refreshFromDictionary",
+    });
   });
 
   it("reports collapse example updates from the switch", () => {

@@ -9,8 +9,10 @@ import { useSearchMachine } from "../hooks/useSearchMachine";
 import { useSettingsState } from "../hooks/useSettingsState";
 import { useWindowShortcuts } from "../hooks/useWindowShortcuts";
 import { lookupWord, playAudio } from "../lib/commands";
+import type { DictSource } from "../lib/types";
 import {
   listenForHistoryLookup,
+  listenForHistorySnapshot,
   openHistoryWindow,
   openSettingsWindow,
 } from "../lib/windowApi";
@@ -24,7 +26,7 @@ export default function MainWindow() {
   const displayResult = searchState.result ?? searchState.previousResult;
 
   const handleSearch = useCallback(
-    async (word: string) => {
+    async (word: string, source: DictSource = settings.dictSource) => {
       const trimmed = word.trim();
       if (!trimmed) return;
 
@@ -32,7 +34,7 @@ export default function MainWindow() {
       dispatch({ type: "SEARCH" });
 
       try {
-        const entry = await lookupWord(trimmed, settings.dictSource);
+        const entry = await lookupWord(trimmed, source);
         if (id !== requestIdRef.current) return;
         dispatch({ type: "RESULT", entry });
       } catch (err: unknown) {
@@ -49,19 +51,46 @@ export default function MainWindow() {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
     let unlisten: (() => void) | undefined;
 
-    listenForHistoryLookup(({ word }) => {
+    listenForHistoryLookup(({ word, source }) => {
       dispatch({ type: "TYPE", text: word });
-      void handleSearch(word);
+      void handleSearch(word, source);
     }).then((cleanup) => {
-      unlisten = cleanup;
+      if (cancelled) {
+        cleanup();
+      } else {
+        unlisten = cleanup;
+      }
     });
 
     return () => {
+      cancelled = true;
       unlisten?.();
     };
   }, [dispatch, handleSearch]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let unlisten: (() => void) | undefined;
+
+    listenForHistorySnapshot(({ entry }) => {
+      dispatch({ type: "TYPE", text: entry.word });
+      dispatch({ type: "RESULT", entry, autoPlayAudio: false });
+    }).then((cleanup) => {
+      if (cancelled) {
+        cleanup();
+      } else {
+        unlisten = cleanup;
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, [dispatch]);
 
   const findAudioUrl = useCallback(
     (region: string): string | null => {
@@ -123,7 +152,7 @@ export default function MainWindow() {
             exampleDisplay={settings.exampleDisplay}
             collapseExamples={settings.collapseExamples}
             highlightExampleTerms={settings.highlightExampleTerms}
-            autoPlayAudio={settings.autoPlayAudio}
+            autoPlayAudio={settings.autoPlayAudio && searchState.autoPlayResultAudio}
             preferredRegion={settings.preferredRegion}
           />
         </div>

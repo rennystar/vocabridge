@@ -15,10 +15,16 @@ import {
 } from "../components/ui/alert-dialog";
 import { Button } from "../components/ui/button";
 import { ScrollArea } from "../components/ui/scroll-area";
+import { useSettingsState } from "../hooks/useSettingsState";
 import { useWindowShortcuts } from "../hooks/useWindowShortcuts";
 import { clearHistory, exportHistory, getHistory } from "../lib/commands";
 import type { ExportFormat, HistoryItem } from "../lib/types";
-import { closeHistoryWindow, requestLookupFromHistory } from "../lib/windowApi";
+import {
+  closeHistoryWindow,
+  listenForHistoryUpdates,
+  requestLookupFromHistory,
+  requestSnapshotFromHistory,
+} from "../lib/windowApi";
 
 export default function HistoryWindow() {
   const [items, setItems] = useState<HistoryItem[]>([]);
@@ -27,6 +33,7 @@ export default function HistoryWindow() {
   const [error, setError] = useState<string | null>(null);
   const [clearing, setClearing] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const { settings } = useSettingsState();
   useWindowShortcuts({
     onEscape: () => void closeHistoryWindow(),
   });
@@ -47,6 +54,26 @@ export default function HistoryWindow() {
     void loadHistory();
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    let unlisten: (() => void) | undefined;
+
+    listenForHistoryUpdates(() => {
+      void loadHistory();
+    }).then((cleanup) => {
+      if (cancelled) {
+        cleanup();
+      } else {
+        unlisten = cleanup;
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, []);
+
   const filtered = useMemo(() => {
     if (!filter) return items;
     return items.filter((item) =>
@@ -54,9 +81,13 @@ export default function HistoryWindow() {
     );
   }, [filter, items]);
 
-  async function activateItem(word: string, focusMain: boolean) {
-    await requestLookupFromHistory(word, focusMain);
-    await loadHistory();
+  async function activateItem(item: HistoryItem, focusMain: boolean) {
+    if (settings.historyClickBehavior === "refreshFromDictionary") {
+      await requestLookupFromHistory(item.displayWord, item.source, focusMain);
+      return;
+    }
+
+    await requestSnapshotFromHistory(item.cacheKey, item.source, focusMain);
   }
 
   async function handleExport(format: ExportFormat = "csv") {
@@ -135,14 +166,11 @@ export default function HistoryWindow() {
             <button
               key={`${item.cacheKey}-${item.source}`}
               type="button"
-              onClick={() => void activateItem(item.displayWord, false)}
+              onClick={() => void activateItem(item, false)}
               onKeyDown={(event) => {
                 if (event.key !== "Enter") return;
                 event.preventDefault();
-                void activateItem(
-                  item.displayWord,
-                  event.metaKey || event.ctrlKey,
-                );
+                void activateItem(item, event.metaKey || event.ctrlKey);
               }}
               className="w-full border-b border-app-border px-4 py-3 text-left transition-colors hover:bg-app-panel focus:bg-app-panel-2 focus:outline-none"
             >

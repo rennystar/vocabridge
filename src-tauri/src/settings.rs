@@ -46,6 +46,9 @@ fn default_auto_play_audio() -> bool {
 fn default_preferred_region() -> String {
     "uk".to_string()
 }
+fn default_history_click_behavior() -> HistoryClickBehavior {
+    HistoryClickBehavior::SavedSnapshot
+}
 
 // ── Example display enum ──────────────────────────────────────────────
 
@@ -65,6 +68,13 @@ pub enum ExampleDisplay {
     Hidden,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub enum HistoryClickBehavior {
+    SavedSnapshot,
+    RefreshFromDictionary,
+}
+
 // ── Settings struct ──────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -81,6 +91,9 @@ pub struct Settings {
 
     #[serde(default = "default_dict_source")]
     pub dict_source: DictSource,
+
+    #[serde(default = "default_history_click_behavior")]
+    pub history_click_behavior: HistoryClickBehavior,
 
     #[serde(default = "default_example_display")]
     pub example_display: ExampleDisplay,
@@ -114,6 +127,7 @@ impl Default for Settings {
             search_delay: default_search_delay(),
             clear_delay: default_clear_delay(),
             dict_source: default_dict_source(),
+            history_click_behavior: default_history_click_behavior(),
             example_display: default_example_display(),
             collapse_examples: default_collapse_examples(),
             highlight_example_terms: default_highlight_example_terms(),
@@ -172,7 +186,7 @@ impl SettingsStore {
 
 #[cfg(test)]
 mod tests {
-    use super::{DisplaySize, ExampleDisplay, Settings};
+    use super::{DisplaySize, ExampleDisplay, HistoryClickBehavior, Settings};
 
     #[test]
     fn legacy_example_settings_use_new_defaults() {
@@ -186,5 +200,9 @@ mod tests {
         assert!(!settings.collapse_examples);
         assert!(settings.highlight_example_terms);
         assert!(settings.convert_korean_input);
+        assert_eq!(
+            settings.history_click_behavior,
+            HistoryClickBehavior::SavedSnapshot
+        );
     }
 }

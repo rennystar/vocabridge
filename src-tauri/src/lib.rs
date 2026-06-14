@@ -24,6 +24,7 @@ fn register_hotkey<R: tauri::Runtime>(
 
 #[tauri::command]
 async fn lookup_word(
+    app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
     word: String,
     source: Option<dict::DictSource>,
@@ -34,11 +35,13 @@ async fn lookup_word(
     });
     let cache_key = dict::normalize::cache_key(&word);
     // Check cache first
-    {
+    let cached = {
         let hist = state.history.lock().unwrap();
-        if let Some(cached) = hist.get_cached(&cache_key, &source) {
-            return Ok(cached);
-        }
+        hist.get_cached(&cache_key, &source)
+    };
+    if let Some(cached) = cached {
+        windows::emit_history_updated(&app)?;
+        return Ok(cached);
     }
     // Fetch from source
     let result = state
@@ -51,6 +54,7 @@ async fn lookup_word(
         let hist = state.history.lock().unwrap();
         hist.upsert_with_cache_key(&cache_key, &result);
     }
+    windows::emit_history_updated(&app)?;
     Ok(result)
 }
 
@@ -77,6 +81,26 @@ fn get_available_sources(state: tauri::State<'_, AppState>) -> Vec<dict::DictSou
 fn get_history(state: tauri::State<'_, AppState>) -> Result<Vec<history::HistoryItem>, String> {
     let hist = state.history.lock().unwrap();
     hist.list().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn request_snapshot_from_history(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+    cache_key: String,
+    source: dict::DictSource,
+    focus_main: bool,
+) -> Result<(), String> {
+    let entry = {
+        let hist = state.history.lock().unwrap();
+        hist.get_snapshot_and_record_view(&cache_key, &source)
+            .map_err(|e| e.to_string())?
+    };
+
+    let entry = entry.ok_or_else(|| "History snapshot not found".to_string())?;
+    windows::emit_history_snapshot(&app, entry, focus_main)?;
+    windows::emit_history_updated(&app)?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -233,6 +257,7 @@ pub fn run() {
             play_audio,
             get_available_sources,
             get_history,
+            request_snapshot_from_history,
             clear_history,
             export_history,
             get_settings,

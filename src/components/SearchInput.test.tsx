@@ -15,6 +15,7 @@ const baseState: SearchState = {
   result: null,
   error: null,
   previousResult: null,
+  autoPlayResultAudio: true,
 };
 
 function renderSearchInput(

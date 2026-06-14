@@ -7,6 +7,7 @@ export const DEFAULT_SETTINGS: Settings = {
   searchDelay: 1000,
   clearDelay: 3000,
   dictSource: "free_dictionary",
+  historyClickBehavior: "savedSnapshot",
   exampleDisplay: "all",
   collapseExamples: false,
   highlightExampleTerms: true,
